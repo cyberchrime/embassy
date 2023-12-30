@@ -3,7 +3,6 @@
 
 use defmt::*;
 use embassy_executor::Spawner;
-use embassy_net::tcp::TcpSocket;
 use embassy_net::{Ipv4Cidr, Ipv4Address, Stack, StackResources};
 use heapless::Vec;
 use embassy_stm32::eth::generic_smi::GenericSMI;
@@ -11,7 +10,7 @@ use embassy_stm32::eth::{Ethernet, PacketQueue};
 use embassy_stm32::peripherals::ETH;
 use embassy_stm32::rng::Rng;
 use embassy_stm32::{bind_interrupts, eth, peripherals, rng, Config};
-use embassy_time::Timer;
+use embassy_time::Duration;
 use embedded_io_async::Write;
 use rand_core::RngCore;
 use static_cell::StaticCell;
@@ -107,32 +106,40 @@ async fn main(spawner: Spawner) -> ! {
 
     info!("Network task initialized");
 
-    // Then we can use it!
-    let mut rx_buffer = [0; 1024];
-    let mut tx_buffer = [0; 1024];
-
+    let mut rx_buffer = [0; 4096];
+    let mut tx_buffer = [0; 4096];
+    let mut buf = [0; 4096];
     loop {
-        let mut socket = TcpSocket::new(&stack, &mut rx_buffer, &mut tx_buffer);
+        let mut socket = embassy_net::tcp::TcpSocket::new(stack, &mut rx_buffer, &mut tx_buffer);
+        socket.set_timeout(Some(Duration::from_secs(10)));
 
-        socket.set_timeout(Some(embassy_time::Duration::from_secs(10)));
-
-        // You need to start a server on the host machine, for example: `nc -l 8000`
-        let remote_endpoint = (Ipv4Address::new(10, 42, 0, 1), 8000);
-        info!("connecting...");
-        let r = socket.connect(remote_endpoint).await;
-        if let Err(e) = r {
-            info!("connect error: {:?}", e);
-            Timer::after_secs(1).await;
+        //led.set_low();
+        info!("Listening on TCP:1234...");
+        if let Err(e) = socket.accept(1234).await {
+            warn!("accept error: {:?}", e);
             continue;
         }
-        info!("connected!");
+        info!("Received connection from {:?}", socket.remote_endpoint());
+        //led.set_high();
+
         loop {
-            let r = socket.write_all(b"Hello\n").await;
-            if let Err(e) = r {
-                info!("write error: {:?}", e);
+            let n = match socket.read(&mut buf).await {
+                Ok(0) => {
+                    warn!("read EOF");
+                    break;
+                }
+                Ok(n) => n,
+                Err(e) => {
+                    warn!("{:?}", e);
+                    break;
+                }
+            };
+            info!("rxd {}", core::str::from_utf8(&buf[..n]).unwrap());
+
+            if let Err(e) = socket.write_all(&buf[..n]).await {
+                warn!("write error: {:?}", e);
                 break;
             }
-            Timer::after_secs(1).await;
         }
     }
 }
