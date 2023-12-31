@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 
-use defmt::*;
+use defmt::{info, warn, unwrap};
 use embassy_executor::Spawner;
 use embassy_net::{Ipv4Cidr, Ipv4Address, Stack, StackResources};
 use heapless::Vec;
@@ -12,6 +12,7 @@ use embassy_stm32::rng::Rng;
 use embassy_stm32::{bind_interrupts, eth, peripherals, rng, Config};
 use embassy_time::Duration;
 use embedded_io_async::Write;
+use embedded_io::Write as bWrite;
 use rand_core::RngCore;
 use static_cell::StaticCell;
 use {defmt_rtt as _, panic_probe as _};
@@ -114,8 +115,8 @@ async fn main(spawner: Spawner) -> ! {
         socket.set_timeout(Some(Duration::from_secs(10)));
 
         //led.set_low();
-        info!("Listening on TCP:1234...");
-        if let Err(e) = socket.accept(1234).await {
+        info!("Listening on TCP:80...");
+        if let Err(e) = socket.accept(80).await {
             warn!("accept error: {:?}", e);
             continue;
         }
@@ -136,10 +137,43 @@ async fn main(spawner: Spawner) -> ! {
             };
             info!("rxd {}", core::str::from_utf8(&buf[..n]).unwrap());
 
-            if let Err(e) = socket.write_all(&buf[..n]).await {
+            let s = core::str::from_utf8(&buf[..n]).unwrap();
+            match &s.split(" ").next() {
+                Some("GET") => info!("GET"),
+                Some("POST") => info!("POST: Toggle LED"),
+                _ => {
+                    warn!("Unexpected request: {:?}", s);
+                    break;
+                },
+            }
+
+            let status_line = "HTTP/1.1 200 OK";
+            let contents = PAGE;
+            let length = contents.len();
+
+            let _ = write!(
+                &mut buf[..],
+                "{status_line}\r\nContent-Length: {length}\r\n\r\n{contents}\r\n\0"
+            );
+
+            if let Err(e) = socket.write_all(&buf).await {
                 warn!("write error: {:?}", e);
                 break;
             }
         }
     }
 }
+
+// Web page
+const PAGE: &str = r#"<!DOCTYPE html>
+<html>
+<body>
+
+<h1>The button Element</h1>
+
+<form action="/">
+  <input type="submit" formmethod="post" value="Submit">
+</form> 
+
+</body>
+</html>"#;

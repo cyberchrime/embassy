@@ -23,6 +23,7 @@ embedded-hal-1 = { package = "embedded-hal", version = "=1.0.0-rc.3" }
 embedded-hal-async = { version = "=1.0.0-rc.3" }
 embedded-nal-async = { version = "0.7.1" }
 embedded-io-async = { version = "0.6.1" }
+embedded-io = { version = "0.6.0", features = ["defmt-03"] }
 panic-probe = { version = "0.3", features = ["print-defmt"] }
 futures = { version = "0.3.17", default-features = false, features = ["async-await"] }
 heapless = { version = "0.8", default-features = false }
