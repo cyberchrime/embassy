@@ -5,6 +5,7 @@ use defmt::{info, warn, unwrap};
 use embassy_executor::Spawner;
 use embassy_net::{Ipv4Cidr, Ipv4Address, Stack, StackResources};
 use heapless::Vec;
+use embassy_stm32::gpio::{Level, Output, Speed};
 use embassy_stm32::eth::generic_smi::GenericSMI;
 use embassy_stm32::eth::{Ethernet, PacketQueue};
 use embassy_stm32::peripherals::ETH;
@@ -55,6 +56,8 @@ async fn main(spawner: Spawner) -> ! {
     }
     let p = embassy_stm32::init(config);
     info!("Hello World!");
+
+    let mut led = Output::new(p.PB14, Level::High, Speed::Low);
 
     // Generate random seed.
     let mut rng = Rng::new(p.RNG, Irqs);
@@ -140,7 +143,10 @@ async fn main(spawner: Spawner) -> ! {
             let s = core::str::from_utf8(&buf[..n]).unwrap();
             match &s.split(" ").next() {
                 Some("GET") => info!("GET"),
-                Some("POST") => info!("POST: Toggle LED"),
+                Some("POST") => {
+                    info!("POST: Toggle LED");
+                    led.toggle();
+                },
                 _ => {
                     warn!("Unexpected request: {:?}", s);
                     break;
@@ -169,10 +175,10 @@ const PAGE: &str = r#"<!DOCTYPE html>
 <html>
 <body>
 
-<h1>The button Element</h1>
+<h1>Rust Web Server</h1>
 
 <form action="/">
-  <input type="submit" formmethod="post" value="Submit">
+  <input type="submit" formmethod="post" value="Toggle LED">
 </form> 
 
 </body>
